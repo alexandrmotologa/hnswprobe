@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>hnswprobe - Vector Search HNSW Health Cockpit</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Top Navigation Header -->
+    <header class="app-header">
+      <div class="brand-group">
+        <div class="brand-pill">
+          <span class="brand-pulse"></span>
+          <span class="brand-title">hnswprobe</span>
+        </div>
+        <span class="brand-subtitle">Vector Search HNSW Health Cockpit</span>
+      </div>
+
+      <div class="header-status-group">
+        <div class="backend-badge" id="backend-badge">Backend: connecting...</div>
+        <div class="status-badge status-optimal" id="overall-status-badge">Health: Checking</div>
+        <button class="btn btn-secondary" id="refresh-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+          Refresh Audit
+        </button>
+        <button class="btn btn-primary" id="compact-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+          Trigger Compaction
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="dashboard-grid">
+      <!-- Metric Cards Row -->
+      <section class="kpi-row">
+        <div class="kpi-card" id="card-recall">
+          <div class="kpi-header">
+            <span class="kpi-label">Mean Recall@k</span>
+            <span class="kpi-badge badge-green" id="kpi-recall-badge">Healthy</span>
+          </div>
+          <div class="kpi-value" id="kpi-recall-val">--%</div>
+          <div class="kpi-subtext" id="kpi-recall-sub">Compared to exact brute-force k-NN</div>
+        </div>
+
+        <div class="kpi-card" id="card-tombstone">
+          <div class="kpi-header">
+            <span class="kpi-label">Tombstone Bloat Ratio</span>
+            <span class="kpi-badge badge-gray" id="kpi-tombstone-badge">0.0%</span>
+          </div>
+          <div class="kpi-value" id="kpi-tombstone-val">--%</div>
+          <div class="kpi-subtext" id="kpi-tombstone-sub">0 dead nodes retaining edges</div>
+        </div>
+
+        <div class="kpi-card" id="card-orphans">
+          <div class="kpi-header">
+            <span class="kpi-label">Orphan Vertices</span>
+            <span class="kpi-badge badge-gray" id="kpi-orphan-badge">0.0%</span>
+          </div>
+          <div class="kpi-value" id="kpi-orphan-val">0</div>
+          <div class="kpi-subtext" id="kpi-orphan-sub">Layer 0 in-degree zero</div>
+        </div>
+
+        <div class="kpi-card" id="card-hops">
+          <div class="kpi-header">
+            <span class="kpi-label">Trajectory Efficiency</span>
+            <span class="kpi-badge badge-blue" id="kpi-efficiency-badge">--</span>
+          </div>
+          <div class="kpi-value" id="kpi-efficiency-val">--</div>
+          <div class="kpi-subtext" id="kpi-hops-sub">Avg traversal hops: --</div>
+        </div>
+
+        <div class="kpi-card" id="card-diameter">
+          <div class="kpi-header">
+            <span class="kpi-label">Estimated Diameter</span>
+            <span class="kpi-badge badge-purple" id="kpi-diameter-badge">Layer 0</span>
+          </div>
+          <div class="kpi-value" id="kpi-diameter-val">--</div>
+          <div class="kpi-subtext" id="kpi-diameter-sub">Double-sweep BFS geodesic bound</div>
+        </div>
+      </section>
+
+      <!-- Center Content: Visualizer & Right Panels -->
+      <div class="content-split">
+        <!-- Interactive Graph Visualizer -->
+        <section class="visualizer-container">
+          <div class="panel-header">
+            <div class="panel-title-group">
+              <h2 class="panel-title">HNSW Graph Topology Visualizer</h2>
+              <span class="panel-tag" id="graph-stats-tag">Nodes: -- | Edges: --</span>
+            </div>
+            <div class="visualizer-controls">
+              <div class="control-group">
+                <label for="layer-select">Layer:</label>
+                <select id="layer-select" class="form-select">
+                  <option value="all">All Layers</option>
+                  <option value="0">Layer 0 (Base)</option>
+                  <option value="1">Layer 1</option>
+                  <option value="2">Layer 2+</option>
+                </select>
+              </div>
+
+              <div class="control-group">
+                <button class="btn-toggle active" id="view-mode-2d">2D Projection</button>
+                <button class="btn-toggle" id="view-mode-3d">3D Isometric</button>
+              </div>
+
+              <button class="btn btn-accent" id="simulate-hop-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                Simulate Query Hops
+              </button>
+
+              <button class="btn-icon" id="reset-cam-btn" title="Reset View">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="canvas-wrapper" id="canvas-wrapper">
+            <canvas id="graph-canvas"></canvas>
+            <div class="canvas-legend">
+              <div class="legend-item"><span class="legend-dot dot-entry"></span> Entry Point</div>
+              <div class="legend-item"><span class="legend-dot dot-active"></span> Active Node</div>
+              <div class="legend-item"><span class="legend-dot dot-tomb"></span> Tombstone</div>
+              <div class="legend-item"><span class="legend-dot dot-orphan"></span> Orphan (0 In-Deg)</div>
+              <div class="legend-item"><span class="legend-dot dot-hub"></span> Hub Bottleneck</div>
+              <div class="legend-item"><span class="legend-dot dot-hop"></span> Query Hop</div>
+            </div>
+            <div class="node-tooltip" id="node-tooltip"></div>
+          </div>
+        </section>
+
+        <!-- Right Side: Tuning & Recommendations -->
+        <aside class="sidebar-panels">
+          <!-- Recommendations Card -->
+          <div class="panel-card recommendation-card">
+            <div class="panel-header-sm">
+              <h3 class="panel-subtitle">Actionable Recommendations</h3>
+              <span class="recommendation-badge" id="rec-action-badge">Analyzing</span>
+            </div>
+            <p class="rec-text" id="rec-text">Evaluating index telemetry and decay metrics...</p>
+            <div class="rec-params-grid">
+              <div class="rec-param-item">
+                <span class="param-label">Optimal efSearch</span>
+                <span class="param-val" id="rec-param-ef">--</span>
+              </div>
+              <div class="rec-param-item">
+                <span class="param-label">Recommended M</span>
+                <span class="param-val" id="rec-param-m">--</span>
+              </div>
+              <div class="rec-param-item">
+                <span class="param-label">efConstruction</span>
+                <span class="param-val" id="rec-param-efc">--</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Pareto Frontier Chart Panel -->
+          <div class="panel-card">
+            <div class="panel-header-sm">
+              <h3 class="panel-subtitle">Pareto Frontier (Latency vs Recall)</h3>
+              <span class="panel-tag" id="pareto-knee-tag">Knee: --</span>
+            </div>
+            <div class="chart-container">
+              <canvas id="pareto-canvas" width="340" height="180"></canvas>
+            </div>
+            <div class="pareto-slider-box">
+              <div class="slider-header">
+                <label for="ef-slider">Test efSearch:</label>
+                <span class="slider-val-badge" id="slider-ef-val">32</span>
+              </div>
+              <input type="range" id="ef-slider" min="8" max="256" step="8" value="32" class="slider-input">
+              <div class="slider-predictions">
+                <span>Predicted Recall: <strong id="pred-recall">--%</strong></span>
+                <span>Latency: <strong id="pred-latency">-- ms</strong></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Out-Degree Histogram Panel -->
+          <div class="panel-card">
+            <div class="panel-header-sm">
+              <h3 class="panel-subtitle">Layer 0 Out-Degree Distribution</h3>
+              <span class="panel-tag" id="degree-gini-tag">Gini: --</span>
+            </div>
+            <div class="chart-container">
+              <canvas id="degree-canvas" width="340" height="130"></canvas>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </main>
+
+    <!-- Modal for Compaction Status -->
+    <div class="modal-overlay" id="compaction-modal">
+      <div class="modal-card">
+        <h3 class="modal-title">Graph Compaction in Progress</h3>
+        <p class="modal-text">Purging tombstoned vectors, repairing broken bridges, and refreshing index metadata...</p>
+        <div class="modal-spinner"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
