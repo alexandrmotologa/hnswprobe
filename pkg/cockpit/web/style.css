@@ -809,3 +809,116 @@ body {
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* ==========================================================================
+   Responsive & Adaptive Viewport Layouts (Mobile, Tablet, Desktop)
+   Guarantees zero text wrapping and strict visual integrity
+   ========================================================================== */
+
+@media (max-width: 1024px) {
+  .app-header {
+    padding: 12px 16px;
+  }
+  
+  .dashboard-grid {
+    padding: 16px;
+    gap: 16px;
+  }
+  
+  .header-status-group {
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  
+  .content-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .app-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    padding: 12px 14px;
+  }
+  
+  .brand-group {
+    justify-content: space-between;
+    width: 100%;
+  }
+  
+  .brand-subtitle {
+    display: none;
+  }
+  
+  .header-status-group {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    width: 100%;
+  }
+  
+  .kpi-row {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+  
+  .visualizer-controls {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  
+  .canvas-wrapper {
+    height: 420px;
+  }
+  
+  .chaos-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 14px;
+  }
+  
+  .chaos-actions {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 2px;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-header {
+    padding: 10px 12px;
+  }
+  
+  .dashboard-grid {
+    padding: 12px;
+    gap: 12px;
+  }
+  
+  .kpi-row {
+    grid-template-columns: 1fr;
+  }
+  
+  .canvas-wrapper {
+    height: 360px;
+  }
+  
+  .canvas-legend {
+    display: none;
+  }
+  
+  .btn {
+    padding: 5px 10px;
+    font-size: 11px;
+  }
+  
+  .btn svg {
+    width: 12px;
+    height: 12px;
+  }
+}
+

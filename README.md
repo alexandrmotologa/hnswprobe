@@ -1,8 +1,43 @@
-# hnswprobe
+<p align="center">
+  <img src="docs/images/logo.png" alt="hnswprobe Logo" width="128" height="128" />
+</p>
+
+<h1 align="center">hnswprobe</h1>
+
+<p align="center">
+  <strong>Autonomous HNSW Vector Index Decay, Tombstone Bloat, and Recall Profiler in Go</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/alexandrmotologa/hnswprobe/actions"><img src="https://img.shields.io/badge/build-passing-brightgreen?style=flat-square" alt="CI Status" /></a>
+  <a href="https://golang.org"><img src="https://img.shields.io/badge/go-1.22+-blue?style=flat-square" alt="Go Version" /></a>
+  <a href="#health-metrics-reference"><img src="https://img.shields.io/badge/memory-%3C%2020MB-success?style=flat-square" alt="Memory Usage" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License" /></a>
+</p>
 
 Audit vector index recall degradation, tombstone bloat, and graph connectivity across pgvector, Qdrant, Milvus, and Chroma.
 
-`hnswprobe` is a lightweight diagnostic profiler and audit daemon written in Go. It samples production vector queries, calculates exact brute-force ground truth in parallel without acquiring database locks, measures recall decay, and estimates graph structural health.
+`hnswprobe` is a diagnostic profiler and audit daemon written in Go. It samples production vector queries, calculates exact brute-force ground truth in parallel without acquiring database locks, measures recall decay, and estimates graph structural health.
+
+---
+
+## Interactive Web Cockpit
+
+`hnswprobe` embeds an HTTP cockpit on port 8383 with a real-time 2D and 3D isometric vector graph visualizer, query hop traversal animations, dynamic Pareto curves, and an interactive Chaos & Degradation Lab.
+
+![hnswprobe Cockpit Animated Demo](docs/images/hnswprobe_demo.gif)
+
+<p align="center"><em>Live HNSW graph exploration: 3D multi-layer inspection, query hop simulation, chaos injection, and instant self-healing compaction.</em></p>
+
+### Responsive Multi-Device Interface
+
+The cockpit adapts dynamically across desktop, tablet, and mobile viewports with strict layout integrity and zero text wrapping:
+
+| Desktop 2D/3D Topology View | Mobile Health Sentinel |
+| :---: | :---: |
+| ![Desktop Cockpit](docs/images/hnswprobe_cockpit_topology.png) | <img src="docs/images/hnswprobe_mobile_cockpit.png" alt="Mobile Cockpit" width="340" /> |
+
+---
 
 ## Key capabilities
 
