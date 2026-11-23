@@ -118,6 +118,23 @@
             </div>
           </div>
 
+          <!-- Chaos & Degradation Lab Sub-Bar -->
+          <div class="chaos-toolbar">
+            <div class="chaos-label">
+              <span class="chaos-icon">⚡</span>
+              <span>Chaos Lab:</span>
+            </div>
+            <div class="chaos-actions">
+              <button class="btn btn-chaos" id="chaos-tombstone-btn" title="Inject 20% soft-deleted tombstones without rewiring">+20% Tombstones</button>
+              <button class="btn btn-chaos" id="chaos-drift-btn" title="Inject new shifted vector cluster">+ Drift Cluster</button>
+              <button class="btn btn-chaos" id="chaos-sever-btn" title="Sever 35% of layer 0 edges to force orphans">Sever Bridges</button>
+              <label class="highway-toggle">
+                <input type="checkbox" id="highway-checkbox" checked>
+                <span>Highlight Highways</span>
+              </label>
+            </div>
+          </div>
+
           <div class="canvas-wrapper" id="canvas-wrapper">
             <canvas id="graph-canvas"></canvas>
             <div class="canvas-legend">
@@ -126,6 +143,7 @@
               <div class="legend-item"><span class="legend-dot dot-tomb"></span> Tombstone</div>
               <div class="legend-item"><span class="legend-dot dot-orphan"></span> Orphan (0 In-Deg)</div>
               <div class="legend-item"><span class="legend-dot dot-hub"></span> Hub Bottleneck</div>
+              <div class="legend-item"><span class="legend-line line-highway"></span> Highway Edge</div>
               <div class="legend-item"><span class="legend-dot dot-hop"></span> Query Hop</div>
             </div>
             <div class="node-tooltip" id="node-tooltip"></div>
@@ -134,6 +152,17 @@
 
         <!-- Right Side: Tuning & Recommendations -->
         <aside class="sidebar-panels">
+          <!-- Selected Node Ascension Inspector -->
+          <div class="panel-card node-inspector-card" id="node-inspector-panel">
+            <div class="panel-header-sm">
+              <h3 class="panel-subtitle">Node Ascension Inspector</h3>
+              <span class="panel-tag" id="inspector-node-status">Select a node</span>
+            </div>
+            <div class="inspector-details" id="inspector-details">
+              <div class="inspector-empty">Click any node on the graph to inspect multi-layer ascension and connectivity.</div>
+            </div>
+          </div>
+
           <!-- Recommendations Card -->
           <div class="panel-card recommendation-card">
             <div class="panel-header-sm">

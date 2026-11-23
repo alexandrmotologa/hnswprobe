@@ -12,6 +12,7 @@ dist/
 *.out
 coverage.txt
 reports/
+data/
 
 # Dependencies
 vendor/

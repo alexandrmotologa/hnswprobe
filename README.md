@@ -11,7 +11,11 @@ Audit vector index recall degradation, tombstone bloat, and graph connectivity a
 - Graph topology diagnostics: Measures layer out-degree distributions, tombstone bloat ratio (TBR), orphan node counts (in-degree zero in layer 0), and navigation diameter.
 - Pareto hyperparameter recommender: Sweeps efSearch values to construct the empirical latency vs recall trade-off curve and recommend optimal index settings (M, efConstruction, efSearch).
 - Automated compaction triggers: Emits webhooks and triggers database compaction commands (REINDEX CONCURRENTLY, segment optimization) when health thresholds are breached.
-- Embedded web cockpit: Web interface on port 8383 with 2D/3D graph topology exploration, recall decay timelines, and live tuning sliders.
+- Embedded web cockpit: Web interface on port 8383 with 2D/3D graph topology exploration, recall decay timelines, live tuning sliders, and an interactive Chaos & Degradation Lab.
+- Adaptive efSearch controller: Exposes dynamic self-healing configuration endpoints (`/api/config/active-ef`) to compensate for degradation during high-tombstone churn without downtime.
+- Quantization distortion profiler: Evaluates angular distortion, relative L2 error, and recall penalties introduced by Scalar Quantization (SQ8).
+- Dataset benchmark generator: Generates self-contained synthetic vector benchmarks with precalculated ground truth top-k for CI pipelines.
+- Turnkey Grafana dashboard: Pre-configured dashboard template for Prometheus alerting and long-term decay trends.
 - Low memory footprint: Runs under 20MB resident memory (typically 3 to 5MB during audits).
 - CI/CD integration: Emits machine-readable JSON summaries and JUnit XML test reports with non-zero exit codes on threshold violations.
 
@@ -138,6 +142,28 @@ hnswprobe_estimated_diameter{backend="qdrant",index="production_knowledge"} 4
 hnswprobe_memory_bytes{backend="qdrant",index="production_knowledge"} 4194304
 ```
 
+### 5. Profile scalar quantization distortion
+
+Audit precision loss and memory savings before enabling quantization:
+
+```bash
+hnswprobe quantize --dimension 64 --samples 500 --k 10
+```
+
+### 6. Generate synthetic benchmark corpus
+
+Generate reproducible vector corpora with pre-calculated exact ground truth:
+
+```bash
+hnswprobe generate-sample \
+  --output ./data/corpus_benchmark.json \
+  --vectors 1000 \
+  --dimension 64 \
+  --clusters 6 \
+  --tombstones 15 \
+  --k 10
+```
+
 ## Health metrics reference
 
 | Metric | Symbol | Description | Healthy Range | Action on Breach |
@@ -154,6 +180,7 @@ Detailed design notes and mathematical formulations are available in the [docume
 - [Architecture & Design](docs/architecture.md)
 - [Database Connectors Guide](docs/connectors.md)
 - [Metrics & Remediation Thresholds](docs/metrics.md)
+- [Grafana Dashboard Setup](docs/grafana.md)
 
 ## License
 

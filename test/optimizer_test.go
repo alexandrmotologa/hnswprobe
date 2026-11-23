@@ -95,4 +95,23 @@ func TestParetoSweepAndPolicyEvaluation(t *testing.T) {
 	if !event.CompactionExecuted {
 		t.Errorf("expected compaction to be executed")
 	}
+
+	// Test AdaptiveController
+	ctrl := optimizer.NewAdaptiveController(0.95, 32, 128)
+	status := ctrl.GetStatus()
+	if status.ActiveEfSearch != 32 {
+		t.Errorf("expected initial efSearch 32, got %d", status.ActiveEfSearch)
+	}
+
+	// Degraded recall should step up efSearch
+	newEf := ctrl.UpdateEvaluation(0.80, nil)
+	if newEf <= 32 {
+		t.Errorf("expected adaptive efSearch to increase above 32, got %d", newEf)
+	}
+
+	// Satisfied recall should relax efSearch
+	relaxedEf := ctrl.UpdateEvaluation(0.98, nil)
+	if relaxedEf >= newEf {
+		t.Errorf("expected adaptive efSearch to relax toward base, got %d", relaxedEf)
+	}
 }

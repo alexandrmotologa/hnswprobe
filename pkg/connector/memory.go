@@ -240,6 +240,88 @@ func (c *MemoryConnector) MarkTombstone(id string) bool {
 	return true
 }
 
+// InjectRandomTombstones marks a fraction of active nodes as tombstones to simulate churn.
+func (c *MemoryConnector) InjectRandomTombstones(ratio float64) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if ratio <= 0 {
+		return 0
+	}
+	if ratio > 0.90 {
+		ratio = 0.90
+	}
+
+	marked := 0
+	for _, n := range c.nodes {
+		if !n.IsTomb && rand.Float64() < ratio {
+			n.IsTomb = true
+			c.tombstoneCount++
+			marked++
+		}
+	}
+	return marked
+}
+
+// InjectDriftCluster introduces a synthetic cluster shifted in vector space to simulate covariate drift.
+func (c *MemoryConnector) InjectDriftCluster(clusterSize int, dimension int, centerOffset float32) []string {
+	if dimension <= 0 {
+		dimension = c.cfg.Dimension
+		if dimension <= 0 {
+			dimension = 16
+		}
+	}
+
+	createdIDs := make([]string, 0, clusterSize)
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	for i := 0; i < clusterSize; i++ {
+		values := make([]float32, dimension)
+		for j := 0; j < dimension; j++ {
+			// Offset cluster mean to create a new topical region
+			values[j] = float32(r.NormFloat64()*0.3) + centerOffset
+		}
+		newID := fmt.Sprintf("drift-%d-%03d", time.Now().Unix()%10000, i)
+		c.Insert(newID, values)
+		createdIDs = append(createdIDs, newID)
+	}
+
+	return createdIDs
+}
+
+// SeverEdges randomly deletes edges in layer 0 to artificially create graph partitions and orphan nodes.
+func (c *MemoryConnector) SeverEdges(severRatio float64) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if severRatio <= 0 {
+		return 0
+	}
+	if severRatio > 0.90 {
+		severRatio = 0.90
+	}
+
+	cutCount := 0
+	for _, n := range c.nodes {
+		layer0Nbrs, ok := n.Neighbors[0]
+		if !ok || len(layer0Nbrs) == 0 {
+			continue
+		}
+
+		surviving := make([]string, 0, len(layer0Nbrs))
+		for _, nbr := range layer0Nbrs {
+			if rand.Float64() < severRatio {
+				cutCount++
+			} else {
+				surviving = append(surviving, nbr)
+			}
+		}
+		n.Neighbors[0] = surviving
+	}
+
+	return cutCount
+}
+
 func (c *MemoryConnector) searchLayer(query []float32, entryPoints []string, ef int, level int) []groundtruth.Neighbor {
 	visited := make(map[string]bool)
 	candidates := &minDistHeap{}

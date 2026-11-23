@@ -22,6 +22,8 @@
   };
 
   let hoveredNode = null;
+  let selectedNode = null;
+  let highlightHighways = true;
   let animationHopPath = [];
   let hopStep = 0;
   let isSimulatingHop = false;
@@ -115,6 +117,37 @@
       renderGraph();
     });
 
+    // Chaos and Highway controls
+    const hwCheckbox = document.getElementById('highway-checkbox');
+    if (hwCheckbox) {
+      hwCheckbox.addEventListener('change', (e) => {
+        highlightHighways = e.target.checked;
+        renderGraph();
+      });
+    }
+
+    const chaosTombBtn = document.getElementById('chaos-tombstone-btn');
+    if (chaosTombBtn) {
+      chaosTombBtn.addEventListener('click', () => triggerChaos('/api/chaos/tombstones', { ratio: 0.20 }));
+    }
+
+    const chaosDriftBtn = document.getElementById('chaos-drift-btn');
+    if (chaosDriftBtn) {
+      chaosDriftBtn.addEventListener('click', () => triggerChaos('/api/chaos/drift', { size: 35, offset: 2.0 }));
+    }
+
+    const chaosSeverBtn = document.getElementById('chaos-sever-btn');
+    if (chaosSeverBtn) {
+      chaosSeverBtn.addEventListener('click', () => triggerChaos('/api/chaos/sever', { ratio: 0.35 }));
+    }
+
+    // Canvas click selection
+    canvas.addEventListener('click', () => {
+      if (hoveredNode) {
+        selectNode(hoveredNode);
+      }
+    });
+
     // Pareto slider
     const slider = document.getElementById('ef-slider');
     slider.addEventListener('input', (e) => {
@@ -140,6 +173,92 @@
       .catch((err) => {
         console.error('Failed to fetch audit data:', err);
       });
+  }
+
+  function triggerChaos(endpoint, payload) {
+    const modal = document.getElementById('compaction-modal');
+    modal.classList.add('active');
+    const titleEl = document.querySelector('.modal-title');
+    const textEl = document.querySelector('.modal-text');
+    if (titleEl) titleEl.textContent = 'Injecting Chaos Experiment...';
+    if (textEl) textEl.textContent = 'Simulating graph disruption, drift, and evaluating new recall metrics...';
+
+    fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        modal.classList.remove('active');
+        if (titleEl) titleEl.textContent = 'Graph Compaction in Progress';
+        if (textEl) textEl.textContent = 'Purging tombstoned vectors, repairing broken bridges, and refreshing index metadata...';
+
+        if (data.snapshot) {
+          currentSnapshot = data.snapshot;
+          visualData = data.snapshot.visual_graph;
+          updateDashboard(data.snapshot);
+          renderGraph();
+          renderParetoChart(data.snapshot.pareto);
+          renderDegreeHistogram(data.snapshot.topology);
+          if (selectedNode) {
+            const updated = visualData.nodes.find((n) => n.id === selectedNode.id);
+            if (updated) selectNode(updated);
+          }
+        } else {
+          fetchAuditData(true);
+        }
+      })
+      .catch((err) => {
+        modal.classList.remove('active');
+        alert('Chaos injection error: ' + err);
+      });
+  }
+
+  function selectNode(node) {
+    selectedNode = node;
+    const statusTag = document.getElementById('inspector-node-status');
+    if (statusTag) statusTag.textContent = node.id;
+
+    const details = document.getElementById('inspector-details');
+    if (!details) return;
+
+    const levels = node.ascension_levels && node.ascension_levels.length > 0 ? node.ascension_levels : [node.layer];
+    const pillsHtml = levels.map((l) => `<span class="ascension-pill">L${l}</span>`).join(' ');
+
+    const statusHtml = node.is_tomb
+      ? '<span style="color:var(--crimson)">Tombstone</span>'
+      : node.is_orphan
+      ? '<span style="color:#ec4899">Orphan (0 In-Deg)</span>'
+      : node.is_hub
+      ? '<span style="color:var(--amber)">Hub Bottleneck</span>'
+      : node.is_entry
+      ? '<span style="color:var(--violet)">Entry Point</span>'
+      : '<span style="color:var(--cyan-primary)">Active</span>';
+
+    details.innerHTML = `
+      <div class="inspector-row">
+        <span class="inspector-key">Node ID:</span>
+        <span class="inspector-val">${node.id}</span>
+      </div>
+      <div class="inspector-row">
+        <span class="inspector-key">Ascension Levels:</span>
+        <div class="ascension-pills">${pillsHtml}</div>
+      </div>
+      <div class="inspector-row">
+        <span class="inspector-key">In-Degree:</span>
+        <span class="inspector-val">${node.in_degree}</span>
+      </div>
+      <div class="inspector-row">
+        <span class="inspector-key">Out-Degree:</span>
+        <span class="inspector-val">${node.out_degree}</span>
+      </div>
+      <div class="inspector-row">
+        <span class="inspector-key">Status:</span>
+        <span class="inspector-val">${statusHtml}</span>
+      </div>
+    `;
+    renderGraph();
   }
 
   function triggerCompaction() {
@@ -291,9 +410,6 @@
     });
 
     // 1. Draw Edges
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-
     visualData.edges.forEach((edge) => {
       if (selectedLayer !== 'all') {
         if (selectedLayer === '2' && edge.layer < 2) return;
@@ -304,11 +420,39 @@
       const p2 = nodePosMap.get(edge.target);
       if (p1 && p2) {
         ctx.beginPath();
+        if (highlightHighways && edge.is_highway) {
+          ctx.lineWidth = 1.8;
+          ctx.strokeStyle = 'rgba(139, 92, 246, 0.65)';
+          ctx.shadowColor = '#8b5cf6';
+          ctx.shadowBlur = 5;
+        } else {
+          ctx.lineWidth = 1;
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+          ctx.shadowBlur = 0;
+        }
         ctx.moveTo(p1.x, p1.y);
         ctx.lineTo(p2.x, p2.y);
         ctx.stroke();
+        ctx.shadowBlur = 0;
       }
     });
+
+    // 1.5 Draw Multi-Layer Ascension Pillar for Selected Node
+    if (selectedNode && viewMode === '3d' && selectedNode.ascension_levels && selectedNode.ascension_levels.length > 1) {
+      const levels = selectedNode.ascension_levels;
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#c4b5fd';
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      levels.forEach((l, idx) => {
+        const dummyNode = { x: selectedNode.x, y: selectedNode.y, z: l * 120.0 };
+        const p = project(dummyNode, width, height);
+        if (idx === 0) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
+      });
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
 
     // 2. Draw Simulation Hop Path
     if (animationHopPath.length > 1) {
@@ -374,6 +518,18 @@
         ctx.arc(pos.x, pos.y, 8 * camera.zoom, 0, Math.PI * 2);
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+    }
+
+    // 5. Highlight Selected Node
+    if (selectedNode) {
+      const pos = nodePosMap.get(selectedNode.id);
+      if (pos) {
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, 10 * camera.zoom, 0, Math.PI * 2);
+        ctx.strokeStyle = '#c4b5fd';
+        ctx.lineWidth = 2.5;
         ctx.stroke();
       }
     }

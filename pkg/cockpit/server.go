@@ -27,6 +27,7 @@ type Server struct {
 	mu           sync.RWMutex
 	conn         connector.Connector
 	compactor    *compactor.Compactor
+	adaptiveCtrl *optimizer.AdaptiveController
 	port         int
 	sampleCount  int
 	k            int
@@ -61,6 +62,7 @@ func NewServer(conn connector.Connector, cfg Config) *Server {
 	return &Server{
 		conn:         conn,
 		compactor:    compactor.NewCompactor(),
+		adaptiveCtrl: optimizer.NewAdaptiveController(cfg.TargetRecall, 32, 256),
 		port:         cfg.Port,
 		sampleCount:  cfg.SampleCount,
 		k:            cfg.K,
@@ -84,6 +86,11 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/audit", s.handleAudit)
 	mux.HandleFunc("/api/compact", s.handleCompact)
 	mux.HandleFunc("/api/tune", s.handleTune)
+	mux.HandleFunc("/api/chaos/tombstones", s.handleChaosTombstones)
+	mux.HandleFunc("/api/chaos/drift", s.handleChaosDrift)
+	mux.HandleFunc("/api/chaos/sever", s.handleChaosSever)
+	mux.HandleFunc("/api/config/active-ef", s.handleActiveEf)
+	mux.HandleFunc("/api/config/target-recall", s.handleTargetRecall)
 	mux.HandleFunc("/metrics", s.handleMetrics)
 
 	s.httpServer = &http.Server{
@@ -177,6 +184,11 @@ func (s *Server) RunAudit(ctx context.Context) (*AuditSnapshot, error) {
 
 	// 5. Pareto sweep
 	frontier, _ := optimizer.SweepEfSearch(ctx, s.conn, sampleQueries, exactMap, s.k, []int{8, 16, 32, 64, 128})
+
+	// 5.5 Update adaptive controller
+	if s.adaptiveCtrl != nil {
+		s.adaptiveCtrl.UpdateEvaluation(evalReport.MeanRecall, frontier)
+	}
 
 	// 6. Generate recommendations
 	recommendations := optimizer.GenerateRecommendations(stats, evalReport, topoReport, frontier, s.targetRecall)
@@ -301,6 +313,161 @@ func (s *Server) handleTune(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleChaosTombstones(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Ratio float64 `json:"ratio"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	if req.Ratio <= 0 {
+		req.Ratio = 0.20
+	}
+
+	memConn, ok := s.conn.(*connector.MemoryConnector)
+	if !ok {
+		http.Error(w, "Chaos operations require memory connector", http.StatusBadRequest)
+		return
+	}
+
+	marked := memConn.InjectRandomTombstones(req.Ratio)
+	snapshot, err := s.RunAudit(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, map[string]any{
+		"injected_tombstones": marked,
+		"snapshot":            snapshot,
+	})
+}
+
+func (s *Server) handleChaosDrift(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Size   int     `json:"size"`
+		Offset float32 `json:"offset"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	if req.Size <= 0 {
+		req.Size = 40
+	}
+	if req.Offset == 0 {
+		req.Offset = 2.0
+	}
+
+	memConn, ok := s.conn.(*connector.MemoryConnector)
+	if !ok {
+		http.Error(w, "Chaos operations require memory connector", http.StatusBadRequest)
+		return
+	}
+
+	dim := 16
+	if s.latestAudit != nil && s.latestAudit.IndexStats.Dimension > 0 {
+		dim = s.latestAudit.IndexStats.Dimension
+	}
+	created := memConn.InjectDriftCluster(req.Size, dim, req.Offset)
+	snapshot, err := s.RunAudit(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, map[string]any{
+		"drift_vectors_added": len(created),
+		"snapshot":            snapshot,
+	})
+}
+
+func (s *Server) handleChaosSever(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Ratio float64 `json:"ratio"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	if req.Ratio <= 0 {
+		req.Ratio = 0.35
+	}
+
+	memConn, ok := s.conn.(*connector.MemoryConnector)
+	if !ok {
+		http.Error(w, "Chaos operations require memory connector", http.StatusBadRequest)
+		return
+	}
+
+	cut := memConn.SeverEdges(req.Ratio)
+	snapshot, err := s.RunAudit(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, map[string]any{
+		"edges_severed": cut,
+		"snapshot":      snapshot,
+	})
+}
+
+func (s *Server) handleActiveEf(w http.ResponseWriter, r *http.Request) {
+	if s.adaptiveCtrl != nil {
+		status := s.adaptiveCtrl.GetStatus()
+		writeJSON(w, status)
+		return
+	}
+
+	writeJSON(w, map[string]any{
+		"active_ef_search": 32,
+		"target_recall":    s.targetRecall,
+		"auto_tuned":       false,
+	})
+}
+
+func (s *Server) handleTargetRecall(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		TargetRecall float64 `json:"target_recall"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.TargetRecall <= 0 || req.TargetRecall > 1.0 {
+		http.Error(w, "Invalid target recall", http.StatusBadRequest)
+		return
+	}
+
+	s.mu.Lock()
+	s.targetRecall = req.TargetRecall
+	if s.adaptiveCtrl != nil {
+		s.adaptiveCtrl.SetTargetRecall(req.TargetRecall)
+	}
+	s.mu.Unlock()
+
+	snapshot, err := s.RunAudit(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, map[string]any{
+		"status":        "updated",
+		"target_recall": s.targetRecall,
+		"optimal_ef":    snapshot.Recommendations.OptimalEfSearch,
+	})
+}
+
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	s.mu.RLock()
 	latest := s.latestAudit
@@ -356,6 +523,16 @@ func projectVisualGraph(topo *connector.GraphTopologyExport, report topology.Gra
 	r := rand.New(rand.NewSource(1337))
 	nodeCoordMap := make(map[string]VisualNode)
 
+	// Collect ascension levels for every node across layers
+	nodeAscensionMap := make(map[string][]int)
+	for l := 0; l <= topo.MaxLayer; l++ {
+		if layer, has := topo.Layers[l]; has {
+			for id := range layer.Nodes {
+				nodeAscensionMap[id] = append(nodeAscensionMap[id], l)
+			}
+		}
+	}
+
 	// Determine (X, Y) layout using circular / clustered positioning
 	for l := topo.MaxLayer; l >= 0; l-- {
 		layer, hasLayer := topo.Layers[l]
@@ -397,17 +574,18 @@ func projectVisualGraph(topo *connector.GraphTopologyExport, report topology.Gra
 			}
 
 			vn := VisualNode{
-				ID:        id,
-				X:         x,
-				Y:         y,
-				Z:         z,
-				Layer:     l,
-				InDegree:  inDeg,
-				OutDegree: outDeg,
-				IsTomb:    node.IsTomb,
-				IsOrphan:  isOrphan,
-				IsHub:     isHub,
-				IsEntry:   id == topo.EntryPoint,
+				ID:              id,
+				X:               x,
+				Y:               y,
+				Z:               z,
+				Layer:           l,
+				InDegree:        inDeg,
+				OutDegree:       outDeg,
+				IsTomb:          node.IsTomb,
+				IsOrphan:        isOrphan,
+				IsHub:           isHub,
+				IsEntry:         id == topo.EntryPoint,
+				AscensionLevels: nodeAscensionMap[id],
 			}
 
 			visual.Nodes = append(visual.Nodes, vn)
@@ -416,9 +594,10 @@ func projectVisualGraph(topo *connector.GraphTopologyExport, report topology.Gra
 			// Collect edges
 			for _, nbrID := range node.Neighbors {
 				visual.Edges = append(visual.Edges, VisualEdge{
-					Source: id,
-					Target: nbrID,
-					Layer:  l,
+					Source:    id,
+					Target:    nbrID,
+					Layer:     l,
+					IsHighway: l >= 1,
 				})
 			}
 			nodeIdx++

@@ -23,24 +23,26 @@ type AuditSnapshot struct {
 
 // VisualNode represents a projected 2D/3D coordinate for graph visualization.
 type VisualNode struct {
-	ID        string  `json:"id"`
-	X         float64 `json:"x"`
-	Y         float64 `json:"y"`
-	Z         float64 `json:"z"`
-	Layer     int     `json:"layer"`
-	InDegree  int     `json:"in_degree"`
-	OutDegree int     `json:"out_degree"`
-	IsTomb    bool    `json:"is_tomb"`
-	IsOrphan  bool    `json:"is_orphan"`
-	IsHub     bool    `json:"is_hub"`
-	IsEntry   bool    `json:"is_entry"`
+	ID              string  `json:"id"`
+	X               float64 `json:"x"`
+	Y               float64 `json:"y"`
+	Z               float64 `json:"z"`
+	Layer           int     `json:"layer"`
+	InDegree        int     `json:"in_degree"`
+	OutDegree       int     `json:"out_degree"`
+	IsTomb          bool    `json:"is_tomb"`
+	IsOrphan        bool    `json:"is_orphan"`
+	IsHub           bool    `json:"is_hub"`
+	IsEntry         bool    `json:"is_entry"`
+	AscensionLevels []int   `json:"ascension_levels"` // Layers where this vertex exists (e.g. [0, 1, 2])
 }
 
 // VisualEdge represents a directed connection between two nodes in a layer.
 type VisualEdge struct {
-	Source string `json:"source"`
-	Target string `json:"target"`
-	Layer  int    `json:"layer"`
+	Source    string `json:"source"`
+	Target    string `json:"target"`
+	Layer     int    `json:"layer"`
+	IsHighway bool   `json:"is_highway"` // True for high-level navigational bridges (layer >= 1)
 }
 
 // VisualGraphData packages projected coordinates and edge lists for the cockpit renderer.
